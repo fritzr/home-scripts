@@ -1,0 +1,161 @@
+#!/bin/bash
+# Start a ChangeLog entry with the date and my author info
+
+if [ -z "$NAME" ]; then
+  read -e -p "NAME? " NAME
+  if [ -z "$NAME" ]; then
+    exit 2
+  fi
+fi
+if [ -z "$EMAIL" ]; then
+  read -e -p "EMAIL? " EMAIL
+  if [ -z "$EMAIL" ]; then
+    exit 2
+  fi
+fi
+if [ -z "$EDITOR" ]; then
+  EDITOR="$(which vim)"
+fi
+
+function usage() {
+  echo "Usage: $(basename $0) PATCH" >&2
+  echo "Prepare the gcc-svn tree to commit PATCH." >&2
+  echo "Note the PATCH should have been exported by 'git format-patch'." >&2
+  echo $1 >&2
+  exit 1
+}
+
+if [ $# -ne 1 ]; then
+  usage
+fi
+
+patch=$(readlink -f "$1")
+if [ ! -r "$patch" ]; then
+  usage "error: [...]/$(basename $patch): Bad patch file."
+fi
+
+if [ ! -d gcc/fortran -o ! -d gcc/testsuite/gfortran.dg -o ! -d libgfortran ];
+then usage "error: not in a gcc root"
+fi
+
+svn revert -R gcc/fortran gcc/testsuite/gfortran.dg libgfortran && svn update
+test $? -ne 0 && echo "UPDATE FAILED, try again" && exit 2
+
+# Grab message and author from patch file
+oneline=$(grep '^Subject:' $patch | cut -d' ' -f4-)
+author=$(grep '^From:' $patch | cut -d' ' -f2-)
+test -z "$author" && author="$NAME  $EMAIL"
+
+log_head=$(date +"%Y-%m-%d  $author")
+
+diff_tmp=$(mktemp -q)
+msg_tmp=$(mktemp -q)
+commit_tmp=$(mktemp -q)
+
+# Split pieces of commit message into separate files
+ft_cl=./gcc/fortran/ChangeLog
+dg_cl=./gcc/testsuite/ChangeLog
+lb_cl=./libgfortran/ChangeLog
+ft_tmp=$(mktemp -q)
+dg_tmp=$(mktemp -q)
+lb_tmp=$(mktemp -q)
+add_tmp=$(mktemp -q)
+
+CLEANUP="rm -f $msg_tmp $commit_tmp $ft_tmp $dg_tmp $lb_tmp $diff_tmp $add_tmp"
+trap "$CLEANUP" EXIT
+
+cat <<EOF | perl -w -MIO::File -n - $patch || exit 2
+BEGIN {
+  \$ft  = IO::File->new("$ft_tmp", "w");
+  \$dg  = IO::File->new("$dg_tmp", "w");
+  \$lb  = IO::File->new("$lb_tmp", "w");
+  \$msg = IO::File->new("$msg_tmp", "w");
+  \$nil = IO::File->new("/dev/null", "w");
+  \$df  = IO::File->new("$diff_tmp", "w");
+  \$add = IO::File->new("$add_tmp", "w");
+  \$current = \$nil;
+  \$message = 0;
+  \$diff = 0;
+}
+
+  \$line = \$_;
+  if (\$message == 0 && \$diff == 0 && \$line =~ / ([^ ]+)[^|]+\\|[^+]+\\+/) {
+    \$add->print(\$1 . " ");
+  }
+  if (\$line =~ /^---/) {
+    \$current->print("\n");
+    \$current=\$nil;
+    \$message=0;
+  }
+
+  if (\$line =~ /^diff/)        { \$diff=1; }
+  if (\$diff == 1)    { \$df->print(\$line); }
+  if (\$message == 1) {
+    if (\$line =~ /gcc\\/fortran/)     { \$current=\$ft; }
+    elsif (\$line =~ /gcc\\/testsuite/) {
+      \$current=\$dg;
+      \$current->print("\\tgfortran.dg/\n");
+    }
+    elsif (\$line =~ /libgfortran\\//) { \$current=\$lb; }
+    else {
+      \$current->print(\$line);
+    }
+    \$msg->print(\$line);
+  }
+  if (\$line =~ /^Subject[^\\]]+\\] *(.*)$/) {
+    \$message=1;
+    \$msg->print(\$1 . "\n");
+  }
+
+END {
+  \$ft->close();
+  \$dg->close();
+  \$lb->close();
+  \$msg->close();
+  \$df->close();
+  \$add->close();
+}
+EOF
+
+# Apply patch
+patch -N --no-backup-if-mismatch -p1 < $diff_tmp
+test $? -ne 0 && echo "PATCH FAILED, try again" >&2 && exit 2
+
+# Prepend log messages to appropriate changelogs
+for ftype in ft dg lb; do
+  tmp=${ftype}_tmp; tmp=${!tmp}
+  cl=${ftype}_cl; cl=${!cl}
+  if [ -s $tmp ]; then
+    sed -i "s/        /\t/g" $tmp
+    ( echo -e "$log_head\n" | prepend $tmp ) && prepend $tmp $cl
+    echo ">>>> $cl <<<<"
+    cat $tmp
+    echo "=============================="
+  fi
+done
+
+# Prepend 'oneline' description to commit message.
+echo $oneline > $commit_tmp
+cat $msg_tmp >> $commit_tmp
+
+echo ">>>> COMMIT MESSAGE <<<<"
+cat $commit_tmp
+echo "=============================="
+
+echo "* status:"
+cat $add_tmp | xargs svn add -q
+svn status
+
+# Verify commit.
+read -e -p "Commit? [y/N/e] > " do_commit
+test -z "$do_commit" -o "$do_commit" = "N" -o "$do_commit" = "n" \
+  && exit 1
+
+if [ "$do_commit" = "e" -o "$do_commit" = "E" ]; then
+  $EDITOR $commit_tmp
+fi
+
+test $? -eq 0 -a -s "$commit_tmp" \
+  && echo "committing!" && svn commit -F $commit_tmp
+
+exit $?

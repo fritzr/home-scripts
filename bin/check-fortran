@@ -1,0 +1,8 @@
+#!/bin/bash
+# Run fortran tests.
+#
+if [ x"$GCCBLD" != x"" -a -d "$GCCBLD" ]; then
+  cd $GCCBLD
+fi
+
+exec make -sk -j4 check-fortran $* 2>&1 | tee test.log

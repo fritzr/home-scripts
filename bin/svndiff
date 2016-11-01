@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+#
+# Diff preferred for GCC.
+#
+
+diff=/usr/bin/diff
+args="-up"
+exec ${diff} ${args} "$@"

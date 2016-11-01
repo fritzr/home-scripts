@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# Find a GNU-style C function (^function_name)
+#
+
+if [ $# -lt 2 ]; then
+  FILES="*.c"
+fi
+grep -ne "^$1" $FILES ${@:2}

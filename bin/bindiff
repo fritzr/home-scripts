@@ -1,0 +1,11 @@
+#!/bin/bash
+# Binary diff using vim and xxd
+F1="/tmp/$(basename $1)"
+F2="/tmp/$(basename $2)"
+if [ "$F1" = "$F2" ]; then
+  F1=${F1}_a
+  F2=${F2}_b
+fi;
+xxd $1 > $F1
+xxd $2 > $F2
+exec vimdiff $F1 $F2

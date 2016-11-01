@@ -1,0 +1,65 @@
+#!/bin/bash
+#
+# Export a git commit as a patch file to the $PATCH directory.
+# Also split it into a patch and diff file - the diff file doesn't have the
+# commit message at the top.  This is suitable for attaching to an email,
+# where you just copy the commit message into the email.
+#
+function usage() {
+  name=$(basename $0)
+  echo "git $(echo $name | cut -d- -f2-) [<object>] <name> [<directory>]" >&2
+  echo "" >&2
+  echo "Export <object> (default HEAD) as a patch and diff suitable for"
+  echo "submission to GNU. The files will be <name>.patch and <name>.diff." >&2
+  echo "Move the results to <directory> (default \$PATCH if defined)." >&2
+  echo $1 >&2
+  exit 1
+}
+
+test $# -gt 0 -a $# -le 3 || usage
+
+# defaults for 1 arg
+object="HEAD"
+name="$1"
+target="$PATCH"
+
+# slightly ambiguous for 2 args, but we can disambiguate if we see a directory
+if [ $# = 2 ]; then
+  # if 2nd arg is a directory, then object is omitted
+  if [ -d "$2" ]; then
+    name="$1";
+    target="$2";
+  # otherwise, 1st arg is probably an object and target is omitted
+  else
+    name="$2";
+    object="$1";
+  fi
+elif [ $# = 3 ]; then
+  # 3 args, explicit form
+  object=$1
+  name=$2
+  target=$3
+fi
+
+# export patch and diff
+newf=$(git patch $object --stdout > ${name}.patch) || usage "error exporting '$object'"
+
+git diff ${object}^..${object} > ${name}.diff \
+  || usage "error diffing '$object'"
+
+# show changelog
+awk 'x == 0 { print $0 }
+/^---/ { x=1; }' ${name}.patch
+
+# move them over to target if desired
+if [ -d $target -a -w $target ]; then
+  target="$(readlink -f ${target})/"
+  mv -f -b ${name}.patch ${target}${name}.patch
+  mv -f -b ${name}.diff  ${target}${name}.diff
+else
+  target=""
+fi
+
+echo ${target}${name}.patch
+echo ${target}${name}.diff
+

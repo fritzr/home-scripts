@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# Run completion scripts in current directory
+#
+
+cd $HOME/.complete.d
+for i in *.complete local/*.complete; do
+  if [ -f "$i" -a -x "$i" ]; then
+    source "$i"
+  fi
+done
+cd $OLDPWD

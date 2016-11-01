@@ -1,0 +1,41 @@
+## From gcc/tree.h
+
+macro define TREE_CODE(NODE) ((enum tree_code) (NODE)->base.code)
+macro define TREE_CODE_CLASS(CODE) tree_code_type[(int) (CODE)]
+macro define TREE_CODE_CLASS_STRING(CLASS) \
+    tree_code_class_strings[(int) (CLASS)]
+macro define TREE_CHAIN(NODE) ((NODE)->common.chain)
+macro define TREE_TYPE(NODE) ((NODE)->typed.type)
+
+macro define IDENTIFIER_POINTER(NODE) ((const char*) (NODE)->identifier.id.str)
+
+macro define DECL_P(NODE) (TREE_CODE_CLASS (TREE_CODE (NODE)) == tcc_declaration)
+macro define DECL_NAME(NODE) ((NODE)->decl_minimal.name)
+macro define DECL_CONTEXT(NODE) ((NODE)->decl_minimal.context)
+macro define DECL_FIELD_CONTEXT(NODE) ((NODE)->decl_minimal.context)
+macro define DECL_CHAIN(NODE) (TREE_CHAIN (NODE))
+
+macro define TYPE_P(NODE) (TREE_CODE_CLASS (TREE_CODE (NODE)) == tcc_type)
+macro define TYPE_SIZE(NODE) ((NODE)->type_common.size)
+macro define TYPE_NAME(NODE) ((NODE)->type_common.name)
+macro define TYPE_IDENTIFIER(NODE) \
+  (TYPE_NAME (NODE) && DECL_P (TYPE_NAME (NODE)) \
+   ? DECL_NAME (TYPE_NAME (NODE)) : TYPE_NAME (NODE))
+macro define TYPE_FIELDS(NODE) (NODE)->type_non_common.values
+
+## My own shortcuts
+
+macro define NAME_STR(NODE) IDENTIFIER_POINTER (NODE)
+macro define TREE_CODE_CLASS_STR(NODE) \
+        TREE_CODE_CLASS_STRING (TREE_CODE_CLASS (TREE_CODE (NODE)))
+
+# Get the constant value of the integer expression e
+macro define mpz_ival(e) *(e).value.integer._mp_d
+
+define gfc_where
+  if $argc == 0
+    call (*gfc_warning_now)(0, "%C")
+  else
+    call (*gfc_warning_now)(0, "$arg0: %L", &$arg0)
+  end
+end

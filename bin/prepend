@@ -1,0 +1,25 @@
+#!/bin/bash
+#
+# Prepend some text to a file.
+#
+
+function usage() {
+  echo "Usage: $(basename $0) [PREFILE...] POSTFILE"
+  exit 1
+}
+
+pre=/dev/stdin
+if [ $# = 2 ]; then
+  pre=$1;
+  post=$2;
+elif [ $# = 1 ]; then
+  post=$1;
+else
+  usage
+fi
+
+tmp=$(mktemp -q)
+cat $post  > $tmp  || exit 1
+cat $pre   > $post || exit 1
+cat $tmp  >> $post || exit 1
+rm -f $tmp

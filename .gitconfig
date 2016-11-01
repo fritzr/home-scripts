@@ -1,0 +1,19 @@
+[include]
+       path = ~/.gitconfig.local
+[core]
+	editor = /usr/bin/vim
+[merge]
+        tool = vimdiff
+[color]
+	ui = true
+[alias]
+        st = status
+	df = diff
+	dfc = diff --cached
+	last = log -n1 HEAD --stat
+	recommit = commit --amend -C HEAD --reset-author
+        update = add -u
+        up = add -u
+        amend = commit --amend
+        patch = "!f() { git format-patch $1^..$1 ${@}; }; f"
+        prepare = "!f() { git-prepare ${@}; }; f"

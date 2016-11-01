@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# Quick alias for listing only directories.
+#
+
+exec ls -F ${@} | grep /

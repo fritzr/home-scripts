@@ -1,0 +1,4 @@
+#!/bin/bash
+# Run fortran DEC tests.
+#
+exec check-fortran RUNTESTFLAGS=dg.exp=dec\*.f\*

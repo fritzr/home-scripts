@@ -1,0 +1,19 @@
+#!/bin/sh
+# Useful to put at the end of a long-running command.
+# Yells at you with a number of alert beeps given on the commandline.
+#   e.g. make && make install && notify
+#
+
+RET=$?
+
+N=3
+if [ $# -gt 0 ]; then
+    N=$1
+fi
+
+for i in `seq 1 $N`; do
+    echo -ne '\a'
+    sleep 0.1
+done
+
+exit $RET

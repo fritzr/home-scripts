@@ -1,0 +1,70 @@
+#! /bin/sh
+
+# Copyright 1999, 2000, 2001  Alexandre Oliva <oliva@lsd.ic.unicamp.br>
+
+# This script is Free Software, and it can be copied, distributed and
+# modified as defined in the GNU General Public License.  A copy of
+# its license can be downloaded from http://www.gnu.org/copyleft/gpl.html
+
+if test $# -lt 1; then
+    echo usage: env DEBUG="<gdb|emacs>" $0 "<program>" args... >&2
+    exit 1
+fi
+: ${DEBUG=gdb}
+prog="$(gfortran --print-prog-name=f951)"
+gdbinitdir=/tmp/.gdbinit.$$
+gdbinit=$gdbinitdir/init
+mkdir $gdbinitdir ||
+{ echo directory $gdbinitdir already exists >&2; exit 1; }
+{
+    echo "shell rm -rf /tmp/.gdbinit.$$"
+    echo "cd `pwd`"
+    skip=0
+    arglist=
+    out="-o /tmp/.f951-out.s"
+    for arg in ${1+"$@"}; do
+      if [ $skip -ne 0 ]; then
+        skip=0
+        continue
+      fi
+      # escape args
+      case $arg in
+      *[\[\~\#\^\&\*\(\)\{\}\|\;\<\>\?\'\ \	]*|*]*|"")
+	arg="\"$arg\""
+	;;
+      esac
+      # ignore -o targets and -cpp
+      if [ "$arg" = "-o" -o "$arg" = "-cpp" ]; then
+        skip=1
+        continue
+      # ignore -c
+      elif [ "$arg" = "-c" ]; then
+        continue
+      fi
+      arglist="$arglist $arg"
+    done
+    echo "set args $arglist $out"
+} >$gdbinit
+set -x
+case `$DEBUG --version </dev/null 2>/dev/null` in
+    "GDB"*|"GNU gdb"*)
+	# start command-line gdb within the correct working directory,
+	# and set up the specified argument list
+	exec $DEBUG -command $gdbinit $prog;;
+    "DDD"*)
+        # start DDD/gdb within the correct working directory,
+	# and set up the specified argument list
+	exec $DEBUG --debugger "${GDB-gdb} -command $gdbinit" $prog;;
+    "GNU Emacs"*)
+	# start gdb within GNU Emacs, move into the current working
+	# directory and set up the specified argument list
+	exec $DEBUG -eval "(progn (gdb \"${GDB-gdb} $prog\") (gud-call \"source $gdbinit\"))";;
+    XEmacs*)
+	# start gdb within XEmacs, move into the current working
+	# directory and set up the specified argument list
+	exec $DEBUG -eval "(progn ${GDB+(setq gdb-command-name \"$GDB\")} (gdb \"$prog\") (gdb-call \"source $gdbinit\"))";;
+    *) echo you must set DEBUG to either emacs or gdb >&2;;
+esac
+set -e
+rm -rf /tmp/.gdbinit.$$
+exit 1

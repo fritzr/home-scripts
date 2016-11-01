@@ -1,0 +1,6 @@
+#!/bin/sh
+#
+# Quick alias to check the time.
+#
+
+exec date +"%F %T.%N %z"

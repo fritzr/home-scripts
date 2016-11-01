@@ -1,0 +1,62 @@
+#!/bin/bash
+#
+# Command-line completions for vboxmanage arguments
+#
+_list_vms()
+{
+  vboxmanage list vms | sed 's/\(".*"\).*/\1/' | paste -d' '
+  # output e.g. "VM1" "VM2" "VM3"
+}
+
+_vboxmanage_complete()
+{
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+
+  if [ -z "$COMP_CWORD" ]; then
+    return 1;
+  fi
+
+  if [ $COMP_CWORD -eq 1 ]; then
+    COMPREPLY=( $(compgen -W "startvm controlvm showvminfo list" -- $cur) )
+  elif [ $COMP_CWORD -eq 2 ]; then
+    if [ "${COMP_WORDS[1]}" = "list" ]; then
+      COMPREPLY=( $(compgen -W "vms runningvms" -- $cur) )
+    else
+      local IFS=$'\n'
+      COMPREPLY=( $(compgen -W "$(_list_vms)" -- $cur) )
+      local escaped_single_qoute="'\''"
+      local i=0
+      for entry in ${COMPREPLY[*]}
+      do
+        # escape everything - VM names may have quotes and spaces
+        # [ ]bla'bla"bla\bla bla --> [ ]bla\'bla\"bla\\bla\ bla
+        entry="${entry//\\/\\\\}" 
+        entry="${entry//\'/\'}" 
+        entry="${entry//\"/\\\"}" 
+        COMPREPLY[$i]="${entry// /\\ }"
+        (( i++ ))
+      done
+    fi
+  elif [ $COMP_CWORD -eq 3 ]; then
+    case "${COMP_WORDS[1]}" in
+      "controlvm")
+        COMPREPLY=( $(compgen -W "pause resume reset poweroff savestate" -- $cur))
+        ;;
+      "startvm")
+        compopt -o nospace
+        COMPREPLY=( $(compgen -W "--type=" -- $cur) )
+        ;;
+      *)
+        ;;
+    esac
+  elif [ \( "$COMP_CWORD" -eq 4 -o "$COMP_CWORD" -eq 5 \) \
+          -a "${COMP_WORDS[1]}" = "startvm" ]; then 
+      # e.g. [0]vboxmanage [1]startvm [2]ID [3]--type[4]=[5]headless
+      COMPREPLY=( $(compgen -W "headless gui" -- ${COMP_WORDS[5]}) )
+  fi
+
+  return 0
+}
+
+complete -F _vboxmanage_complete vboxmanage

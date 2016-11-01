@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# Slightly more convenient arguments for vncserver
+#
+
+if [ $# -lt 1 ]; then echo "which port?"; exit 1; fi
+vncserver -geometry 1920x1070 -depth 24 $*
+ret=$?
+echo "server pid: $$"
+exit $ret
