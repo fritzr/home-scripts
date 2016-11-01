@@ -39,3 +39,6 @@ define gfc_where
     call (*gfc_warning_now)(0, "$arg0: %L", &$arg0)
   end
 end
+
+break gfc_internal_error
+break gfc_error_now
