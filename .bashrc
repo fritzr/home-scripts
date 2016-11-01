@@ -61,7 +61,9 @@ alias ci="/bin/false"
 alias vi=vim
 
 alias lsc="ls --color=none"
-alias ltr="ls -ltr ${@} | tail"
+function ltr(){
+  ls -ltr ${@} | tail
+}
 
 # 64MB core size
 ulimit -c 67108864
