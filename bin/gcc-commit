@@ -42,14 +42,12 @@ svn revert -R gcc/fortran gcc/testsuite/gfortran.dg libgfortran && svn update
 test $? -ne 0 && echo "UPDATE FAILED, try again" && exit 2
 
 # Grab message and author from patch file
-oneline=$(grep '^Subject:' $patch | cut -d' ' -f4-)
 author=$(grep '^From:' $patch | cut -d' ' -f2-)
 test -z "$author" && author="$NAME  $EMAIL"
 
 log_head=$(date +"%Y-%m-%d  $author")
 
 diff_tmp=$(mktemp -q)
-msg_tmp=$(mktemp -q)
 commit_tmp=$(mktemp -q)
 
 # Split pieces of commit message into separate files
@@ -61,7 +59,7 @@ dg_tmp=$(mktemp -q)
 lb_tmp=$(mktemp -q)
 add_tmp=$(mktemp -q)
 
-CLEANUP="rm -f $msg_tmp $commit_tmp $ft_tmp $dg_tmp $lb_tmp $diff_tmp $add_tmp"
+CLEANUP="rm -f $commit_tmp $ft_tmp $dg_tmp $lb_tmp $diff_tmp $add_tmp"
 trap "$CLEANUP" EXIT
 
 cat <<EOF | perl -w -MIO::File -n - $patch || exit 2
@@ -69,7 +67,7 @@ BEGIN {
   \$ft  = IO::File->new("$ft_tmp", "w");
   \$dg  = IO::File->new("$dg_tmp", "w");
   \$lb  = IO::File->new("$lb_tmp", "w");
-  \$msg = IO::File->new("$msg_tmp", "w");
+  \$msg = IO::File->new("$commit_tmp", "w");
   \$nil = IO::File->new("/dev/null", "w");
   \$df  = IO::File->new("$diff_tmp", "w");
   \$add = IO::File->new("$add_tmp", "w");
@@ -134,10 +132,7 @@ for ftype in ft dg lb; do
   fi
 done
 
-# Prepend 'oneline' description to commit message.
-echo $oneline > $commit_tmp
-cat $msg_tmp >> $commit_tmp
-
+# Dump commit message.
 echo ">>>> COMMIT MESSAGE <<<<"
 cat $commit_tmp
 echo "=============================="
