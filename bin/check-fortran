@@ -5,4 +5,10 @@ if [ x"$GCCBLD" != x"" -a -d "$GCCBLD" ]; then
   cd $GCCBLD
 fi
 
-exec make -sk -j4 check-fortran $* 2>&1 | tee test.log
+make -sk -j4 check-fortran $* 2>&1 | tee test.log
+grep -q 'unexpected' test.log
+if [ $? = 0 ]; then
+  notify 2
+else
+  notify 5
+fi
