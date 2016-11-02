@@ -83,7 +83,9 @@ BEGIN {
   if (\$line =~ /^---/) {
     \$current->print("\\n");
     \$current=\$nil;
-    \$msg->print("\\n");
+    if (\$message == 1) {
+      \$msg->print("\\n");
+    }
     \$message=0;
   }
 
