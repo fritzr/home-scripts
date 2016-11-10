@@ -12,8 +12,12 @@ if [ -f /data/.bashrc ]; then
   . /data/.bashrc
 fi
 
+# Create local config files so various applications don't complain about them
+test -f "$HOME/.vimrc.local" || touch "$HOME/.vimrc.local"
+test -f "$HOME/.gdb.local" || touch "$HOME/.vimrc.local"
+test -f "$HOME/.gitconfig.local" || touch "$HOME/.vimrc.local"
+
 # used by ~/.vim/plugin/gnuchlog.vim and git
-export NAME="Fritz Reese"
 export EMAIL="fritzoreese@gmail.com"
 export EDITOR="/usr/bin/vim"
 
