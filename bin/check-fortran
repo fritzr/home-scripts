@@ -5,10 +5,11 @@ if [ x"$GCCBLD" != x"" -a -d "$GCCBLD" ]; then
   cd $GCCBLD
 fi
 
-make -sk -j4 check-fortran $* 2>&1 | tee test.log
+make -sk -j4 check-fortran $* 2>&1 | tee test.log \
+  | colorize.py -Runexpected -g' expected' -yunresolved -yunsupported -RFAIL
 grep -q 'unexpected' test.log
 if [ $? = 0 ]; then
-  notify 2
+  exec notify 2
 else
-  notify 5
+  exec notify 5
 fi
