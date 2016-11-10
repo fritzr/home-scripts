@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#
+# adb-safe
+#
+# 'Safe' wrapper around adb.
+# Locks each device on a per-user basis, so multiple users do not shell into
+# the device at the same time and clobber stuff.
+#
+# Also provides an improved interface. Given a MAP file with lines like
+# "SID name", you can use adb-safe -s <name> instead of remembering the SID.
+# This is done by partial regex search, so a device named "galaxys5" can be
+# accessed by 'adb-safe -s s5'.
+#
+
+if [ -z "$MAP" -o ! -d "$MAP" ]; then
+# Look for a MAP file. This has to be built manually - start with
+#   adb devices | sed '1d' | cut -d'	' -f1 > $MAP
+# And make sure MAP is set in your environment, or change the default here.
+  MAP=/data/adb-devices.map
+fi
+ADB=$(which adb)
+TMPDIR=/tmp
+SID=""
+
+# map_sid SID var
+#   replace an alias SID with its actual SID
+#   if it is not found just return the original arg
+function map_sid()
+{
+  if [ -f "${MAP}" ]; then
+    cat "${MAP}" | while read sid device; do
+      if echo "$device" | grep -i -q "$1" 2>/dev/null; then
+        echo $sid
+        break
+      fi
+    done
+  fi
+}
+
+# check_locked SID
+#   see if SID is locked by someone other than us
+#   if so exit, dumping who has the lock and which PIDs
+function check_locked()
+{
+  all_locks=$(ls ${TMPDIR}/.adb_$1_*.lock 2>/dev/null)
+  if [ x"$all_locks" != x"" ]; then
+    other_locks=$(grep -vl "$(whoami)" $all_locks)
+    first="$(echo $other_locks | cut -d' ' -f1)"
+    if [ -f "${first}" ]; then
+      who="$(cat ${first} | cut -d. -f1)"
+      echo -n "device $1 in use by ${who} ("
+      for lock in $other_locks; do
+        echo -n "$(cat ${lock} | cut -d. -f2),"
+      done
+      echo ")"
+      exit 1
+    fi
+  fi
+}
+
+# lock_file(SID, pid)
+#   returns name of lock file given SID and pid
+function lock_file()
+{
+  echo ${TMPDIR}/.adb_$1_$2.lock
+}
+
+# lock(SID, pid)
+#   acquires lock on SID
+function lock()
+{
+  cat > $(lock_file $1 $2) <<EOF
+$(whoami).$2
+EOF
+  echo "* locked $1"
+}
+
+# release(SID, pid)
+#   releases lock on SID
+function release()
+{
+  kill $2 2>/dev/null
+  lock=$(lock_file $1 $2)
+  if [ -f "${lock}" ]; then
+    echo "* released $1"
+  fi
+  rm -f "${lock}"
+}
+
+# =======
+
+args=${@}
+check_sid=$(getopt -q -u s: $args)
+
+set -- $check_sid
+for i; do
+  case "$i" in
+    -s) SID=$2; break;;
+  esac
+done
+
+# if we dump devices, also show the alias, if we have an alias (map) file
+if [ -f "${MAP}" -a \( x"$2" = x"devices" \) ]; then
+  TMP=/tmp/.devices
+  ${ADB} devices > "${TMP}"
+  cat "${MAP}" | while read sid device; do
+    sed -i "s/${sid}/${sid} ${device}/" "${TMP}"
+  done
+  cat "${TMP}"
+  rm -f "${TMP}"
+  exit 0
+fi
+
+# only if we are using a sid command do we have work to do
+if [ x"" != x"${SID}" ]; then
+  # see if we can replace the SID with a canonical mapped name
+  NEW_SID=$(map_sid ${SID})
+  if [ -n "$NEW_SID" ]; then
+    echo -e "\t$SID -> $NEW_SID"
+    args=$(echo $args | sed "s/${SID}/${NEW_SID}/")
+    SID=${NEW_SID}
+  fi
+
+  # make sure we aren't locked - this exits if we are
+  check_locked "${SID}"
+
+  ret=0
+  done=false
+  trap 'done=true' ERR SIGCHLD
+  trap 'trap "" ERR; release $SID $pid' EXIT
+
+  # let adb do the work
+  ${ADB} ${args} <&0 &
+  pid=$!
+  sleep 0.01 # 100ms
+
+  # lock only if adb is still running
+  if ! $done && ps $pid >/dev/null; then
+    lock ${SID} $pid
+    wait
+    ret=$?
+  fi
+  exit $ret
+fi
+
+# let adb do the work
+exec ${ADB} ${args}
