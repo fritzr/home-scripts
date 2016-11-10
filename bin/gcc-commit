@@ -1,18 +1,17 @@
 #!/bin/bash
 # Start a ChangeLog entry with the date and my author info
 
-if [ -z "$NAME" ]; then
-  read -e -p "NAME? " NAME
-  if [ -z "$NAME" ]; then
-    exit 2
-  fi
-fi
-if [ -z "$EMAIL" ]; then
-  read -e -p "EMAIL? " EMAIL
-  if [ -z "$EMAIL" ]; then
-    exit 2
-  fi
-fi
+test -z "$NAME" && NAME=$(git config --get --global user.name)
+test -z "$NAME" && NAME=$(git config --get --file ~/.gitconfig.local user.name)
+test -z "$NAME" && read -e -p "NAME? " NAME
+test -z "$NAME" && exit 2
+
+test -z "$EMAIL" && EMAIL=$(git config --get --global user.email)
+test -z "$EMAIL" \
+  && EMAIL=$(git config --get --file ~/.gitconfig.local user.email)
+test -z "$EMAIL" && read -e -p "EMAIL? " EMAIL
+test -z "$EMAIL" && exit 2
+
 if [ -z "$EDITOR" ]; then
   EDITOR="$(which vim)"
 fi
