@@ -61,3 +61,9 @@ map <C-N> ]]z.
 " Find next git conflict
 map <F2> ?^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
 map <F3> /^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
+
+" jump to macro definition
+map gm viw"my/#define \+<C-R>m\><CR><CR>
+
+" 'jk' in insert mode will escape
+inoremap jk <esc>
