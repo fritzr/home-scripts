@@ -18,7 +18,16 @@ if [ -z "$MAP" -o ! -d "$MAP" ]; then
 # And make sure MAP is set in your environment, or change the default here.
   MAP=/data/adb-devices.map
 fi
-ADB=$(which adb)
+
+# Try to find ADB
+if [ -z "$ADB" -o ! -x "$ADB" ]; then
+  ADB=$(which adb 2>/dev/null)
+  if [ -z "$ADB" -o ! -x "$ADB" ]; then
+    echo "cannot find adb"
+    exit 1
+  fi
+fi
+
 TMPDIR=/tmp
 SID=""
 
