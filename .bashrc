@@ -10,6 +10,8 @@ eval $(dircolors -b $HOME/.dircolors)
 # Machine-specific definitions
 if [ -f /data/.bashrc ]; then
   . /data/.bashrc
+else
+  PATH_DEFAULT="$HOME/bin"
 fi
 
 # Create local config files so various applications don't complain about them
