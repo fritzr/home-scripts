@@ -113,7 +113,7 @@ if [ -f "${MAP}" -a \( x"$2" = x"devices" \) ]; then
   TMP=/tmp/.devices
   ${ADB} devices > "${TMP}"
   cat "${MAP}" | while read sid device; do
-    sed -i "s/${sid}/${sid} ${device}/" "${TMP}"
+    test -n "${sid}" && sed -i "s/${sid}/${sid} ${device}/" "${TMP}"
   done
   cat "${TMP}"
   rm -f "${TMP}"
