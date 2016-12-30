@@ -62,6 +62,9 @@ map <C-N> ]]z.
 map <F2> ?^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
 map <F3> /^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
 
+" Remove all trailing whitespace
+noremap <F5> mr:<C-U>%s/[ \t]\+$//<CR>'rz.
+
 " jump to macro definition
 map gm viw"my/#define \+<C-R>m\><CR><CR>
 
