@@ -17,3 +17,4 @@
         amend = commit --amend
         patch = "!f() { git format-patch $1^..$1 ${@}; }; f"
         prepare = "!f() { git-prepare ${@}; }; f"
+        rc = "!f() { git rebase --continue && git show --stat; }; f"
