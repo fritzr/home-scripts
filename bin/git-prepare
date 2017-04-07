@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Export a git commit as a patch file to the $PATCH directory.
+# Export a git commit as a patch file to the $GIT_PATCH directory.
 # Also split it into a patch and diff file - the diff file doesn't have the
 # commit message at the top.  This is suitable for attaching to an email,
 # where you just copy the commit message into the email.
@@ -11,7 +11,7 @@ function usage() {
   echo "" >&2
   echo "Export <object> (default HEAD) as a patch and diff suitable for"
   echo "submission to GNU. The files will be <name>.patch and <name>.diff." >&2
-  echo "Move the results to <directory> (default \$PATCH if defined)." >&2
+  echo "Move the results to <directory> (default \$GIT_PATCH if defined)." >&2
   echo $1 >&2
   exit 1
 }
@@ -21,7 +21,7 @@ test $# -gt 0 -a $# -le 3 || usage
 # defaults for 1 arg
 object="HEAD"
 name="$1"
-target="$PATCH"
+target="$GIT_PATCH"
 
 # slightly ambiguous for 2 args, but we can disambiguate if we see a directory
 if [ $# = 2 ]; then
