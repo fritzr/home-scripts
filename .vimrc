@@ -65,8 +65,34 @@ map <C-N> ]]z.
 map <F2> ?^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
 map <F3> /^\(<<<<<<<\\|=======\\|>>>>>>>\)<CR>
 
+" 'Save' with S. The default behavior for S is the same as 'cc'.
+nnoremap S :w<CR>
+
+" Open buffer list, ready to choose one
+nnoremap ,b :ls<CR>:buffer<Space>
+
 " Remove all trailing whitespace
-noremap <F5> mr:<C-U>%s/[ \t]\+$//<CR>'rz.
+nnoremap <F5> mr:<C-U>%s/[ \t]\+$//<CR>'rz.
+
+" Map space to ':' since it is easier
+nnoremap <space> :noh<CR>
+vnoremap <space> :noh<CR>
+
+" VNC viewer likes to ignore CTRL quite frequently.
+" So remap some common CTRL-... commands.
+
+" u=undo, U=redo
+nnoremap U :redo<CR>
+" - jump last,  = jump next
+nnoremap - <C-O>
+nnoremap = <C-I>
+" \ down, | up (half-page)
+noremap <Bar> <C-U>
+noremap <Bslash> <C-D>
+
+" use ',' as map leader, so '\'X is not bound to anything and
+" works as <C-D> with no delay
+let mapleader = ","
 
 " jump to macro definition
 map gm viw"my/#define \+<C-R>m\><CR><CR>
