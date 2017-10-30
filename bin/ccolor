@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+#
+# ccolor.py
+#
+# Colorize compiler output, while keeping stdout and stderr separate.
+#
+
+import sys
+import os
+import stat
+from os import path
+from subprocess import PIPE, Popen as popen
+
+from colorize import colorize
+
+opts = (
+    "-c", '^[^ ]+:',      #         cyan: <source name>:
+    "-R", '[Ee]rror:?',   #     dark red: <errors>
+    "-M", '[Ww]arning:?', # dark magenta: <warnings>
+    "-Y", ' -o *[^ ]+',   #  dark yellow: -o <output>
+    "-m", ' -D *[^ ]+',   #      magenta: -D <defines>
+    "-g", ' -I *[^ ]+',   #        green: -I <includes>
+    "-b", ' -L *[^ ]+',   #         blue: -L <libraries>
+    "-r", ' -c *[^ ]+',   #          red: -c <object>
+)
+
+def usage(errstr=""):
+    prog = path.basename(sys.argv[0])
+    sys.stderr.write("""Usage: %s <compiler path> [compiler arguments]
+
+Run the compiler as a subprocess and colorize its standard output and standard
+error separately. Both streams are passed-through to the corresponding output
+stream of this program.
+
+The exit code of this program will match that of the subprocess.
+""" % (prog,))
+    if errstr:
+        sys.stderr.write(errstr + "\n")
+    sys.stderr.flush()
+    sys.exit(1)
+
+def main():
+    if len(sys.argv) < 2:
+        usage()
+
+    prog, cxx, cxx_args = sys.argv[0], sys.argv[1], sys.argv[2:]
+    subprog_args = [cxx]
+    subprog_args.extend(cxx_args)
+    subprog = popen(subprog_args, shell=False, stdout=PIPE, stderr=PIPE)
+
+    # Colorize stdout and stderr separately
+    colorize(opts, istream=subprog.stdout, ostream=sys.stdout)
+    colorize(opts, istream=subprog.stderr, ostream=sys.stderr)
+
+    return subprog.wait()
+
+if __name__ == '__main__':
+    sys.exit(main())
+
