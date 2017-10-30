@@ -9,7 +9,7 @@ set autoindent
 " set smartindent
 
 au Filetype python set shiftwidth=4
-au Filetype python set softtabstop=2
+au Filetype python set softtabstop=4
 
 " searches follow case-sensitivity like emacs
 set smartcase
