@@ -73,7 +73,7 @@ _names = {
 
 _kcolors = 'rgbcymkwRGBCYMKWu'
 
-def usage():
+def usage(errstr=""):
   fmt = dict()
   for k in _kcolors:
     key = k
@@ -106,6 +106,8 @@ will be colorized.
   -y	{y}		-Y	{by}		-u	{u}
   -m	{m}		-M	{bm}
 """.format(**fmt))
+  if errstr:
+      sys.stderr.write('\n%s\n' % (errstr,))
   sys.stderr.flush()
   sys.exit(1)
 
@@ -144,15 +146,17 @@ def sigpipe(*args):
   sys.stdout.close ()
   sys.exit (0)
 
-def main():
-  # catch SIGPIPE and close nicely
-  signal.signal (signal.SIGPIPE, sigpipe)
+def colorize(args, istream=None, ostream=None):
+  if istream is None:
+    istream = sys.stdin
+  if ostream is None:
+    ostream = sys.stdout
 
   # list of ColorMatch objects
   results = list()
 
   # each color gets an optional regex argument
-  opts, args = getopt(sys.argv[1:], 'h'+('::'.join(_kcolors)+'::'))
+  opts, args = getopt(args, 'h'+('::'.join(_kcolors)+'::'))
 
   for opt, optarg in opts:
     if opt[1] in _kcolors and opt[1].isalpha():
@@ -160,7 +164,7 @@ def main():
       if rx:
         results.append (ColorMatch(rx, opt[1]))
       else:
-        sys.stderr.write('bad regex %s\n' % (optarg))
+        usage("bad regex: '%s'" % (optarg,))
     elif opt[1] == 'h':
       usage()
 
@@ -170,16 +174,22 @@ def main():
 
   # copy input to output, filtering colors along the way
   while True:
-    line = sys.stdin.readline ()
+    line = istream.readline ()
     if not line:
       break
 
     for cmatch in results:
       line = cmatch.filter(line)
 
-    sys.stdout.write(line)
+    ostream.write(line)
+    ostream.flush ()
 
   return ret
+
+def main():
+  # catch SIGPIPE and close nicely
+  signal.signal (signal.SIGPIPE, sigpipe)
+  return colorize(sys.argv[1:])
 
 if __name__ == '__main__':
   sys.exit (main())
