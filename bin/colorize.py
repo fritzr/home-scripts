@@ -6,6 +6,7 @@
 # Simple sed-like script to filter terminal color escapes into any text stream.
 #
 
+import signal
 import sys
 import re
 from StringIO import StringIO
@@ -137,7 +138,16 @@ class ColorMatch(object):
   def __str__(self):
     return _names[self.ck]
 
+def sigpipe(*args):
+  """Called when SIGPIPE is received."""
+  sys.stdout.flush ()
+  sys.stdout.close ()
+  sys.exit (0)
+
 def main():
+  # catch SIGPIPE and close nicely
+  signal.signal (signal.SIGPIPE, sigpipe)
+
   # list of ColorMatch objects
   results = list()
 
