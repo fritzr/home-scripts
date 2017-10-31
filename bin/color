@@ -11,7 +11,7 @@ import threading
 from os import path
 from subprocess import PIPE, Popen as popen
 
-from colorize import colorize, parse_args as colorize_args
+from colorize import colorize, parse_args as colorize_args, sched_yield
 
 def usage(errstr=""):
     prog = path.basename(sys.argv[0])
@@ -69,6 +69,7 @@ def main():
 
     # Try to join the threads irrespective of the order in which they finish.
     while t0.is_alive() or t1.is_alive():
+        sched_yield()
         t0.join(0.010)
         t1.join(0.010)
 
