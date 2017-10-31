@@ -192,7 +192,7 @@ def colorize(opts, istream=None, ostream=None):
 def main():
     # catch SIGPIPE and close nicely
     signal.signal (signal.SIGPIPE, sigpipe)
-    return colorize(parse_args())
+    return colorize(parse_args()[0])
 
 if __name__ == '__main__':
     sys.exit (main())
