@@ -5,6 +5,7 @@
 # Colorize subprocess output, while keeping stdout and stderr separate.
 #
 
+import signal
 import sys
 import os
 import threading
@@ -36,6 +37,22 @@ def run_colorize(startEvent, *args, **kwargs):
     startEvent.wait()
     colorize(*args, **kwargs)
 
+def readline_noop(ostream):
+    """Copy standard input to ostream, but use readline for standard input
+    (if it is a terminal)."""
+    import readline
+    try:
+        while True:
+            line = raw_input() + '\n'
+            ostream.write(line) # uses readline
+            ostream.flush()
+    except EOFError:
+        ostream.close()
+
+def end(signum, frame):
+    # This should clean all the children nicely enough.
+    sys.exit()
+
 def main():
     # Everything before '--' goes to colorize, afterwards fomrs the subprogram.
     colorize_opts, subprog_args = colorize_args(sys.argv[1:])
@@ -44,7 +61,18 @@ def main():
     if not subprog_args:
         usage()
 
-    subprog = popen(subprog_args, shell=False, stdout=PIPE, stderr=PIPE)
+    popen_kwargs = { 'shell': False, 'stdout': PIPE, 'stderr': PIPE }
+
+    # See if colorize is being run in interactive mode in a terminal-
+    # If so, use readline to improve the input semantics
+    for opt, _ in colorize_opts:
+        if opt == '-i' and sys.stdin.isatty():
+            popen_kwargs['stdin'] = PIPE
+            signal.signal(signal.SIGPIPE, end)
+            signal.signal(signal.SIGCHLD, end)
+            break
+
+    subprog = popen(subprog_args, **popen_kwargs)
 
     # Colorize stdout and stderr separately in threads.
     # While the outputs may bash each other in the terminal, this is
@@ -64,8 +92,16 @@ def main():
     t1.start()
     startEvent.set()
 
-    # Run the subprogram.
-    ret = subprog.wait()
+    # Reap the subprogram, ignoring any errors raised up.
+    while subprog.returncode is None:
+        try:
+            # Pass through readline-enabled input for interactive terminals.
+            if subprog.stdin is not None:
+                readline_noop(subprog.stdin)
+            # Wait for program to complete.
+            ret = subprog.wait()
+        except KeyboardInterrupt:
+            pass
 
     # Try to join the threads irrespective of the order in which they finish.
     while t0.is_alive() or t1.is_alive():
