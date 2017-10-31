@@ -256,8 +256,9 @@ def select_lines(istream):
     """Return an iterator yielding a sequence of [line-buffered] input lines.
     Note if the input never ends with a new-line, it will never be yielded."""
     line = istream.readline()
-    if line:
+    while line:
         yield line
+        line = istream.readline()
 
 # each color gets an optional regex argument
 _sopts = 'hi'+'::'.join(_kcolors)+'::'
