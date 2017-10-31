@@ -10,7 +10,6 @@ import signal
 import sys
 import re
 from StringIO import StringIO
-from getopt import getopt
 
 _RESET = "\033[0m"
 _UNDER    = "\033[4m"
@@ -146,7 +145,18 @@ def sigpipe(*args):
   sys.stdout.close ()
   sys.exit (0)
 
-def colorize(args, istream=None, ostream=None):
+# each color gets an optional regex argument
+_sopts = 'h'+'::'.join(_kcolors)+'::'
+
+def parse_args(args=None):
+    """Parse the arguments according to our usage and return (opts, args)
+    as getopt would. If args is None (or not supplied), uses sys.argv[1:]."""
+    if args is None:
+        args = sys.argv[1:]
+    from getopt import getopt
+    return getopt(args, _sopts)
+
+def colorize(opts, istream=None, ostream=None):
   if istream is None:
     istream = sys.stdin
   if ostream is None:
@@ -154,9 +164,6 @@ def colorize(args, istream=None, ostream=None):
 
   # list of ColorMatch objects
   results = list()
-
-  # each color gets an optional regex argument
-  opts, args = getopt(args, 'h'+('::'.join(_kcolors)+'::'))
 
   for opt, optarg in opts:
     if opt[1] in _kcolors and opt[1].isalpha():
@@ -167,10 +174,6 @@ def colorize(args, istream=None, ostream=None):
         usage("bad regex: '%s'" % (optarg,))
     elif opt[1] == 'h':
       usage()
-
-  ret = 0
-  if len(args) > 0:
-    ret = int(args[0])
 
   # copy input to output, filtering colors along the way
   while True:
@@ -184,12 +187,12 @@ def colorize(args, istream=None, ostream=None):
     ostream.write(line)
     ostream.flush ()
 
-  return ret
+  return 0
 
 def main():
   # catch SIGPIPE and close nicely
   signal.signal (signal.SIGPIPE, sigpipe)
-  return colorize(sys.argv[1:])
+  return colorize(parse_args())
 
 if __name__ == '__main__':
   sys.exit (main())

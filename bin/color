@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+#
+# color.py
+#
+# Colorize subprocess output, while keeping stdout and stderr separate.
+#
+
+import sys
+import os
+import threading
+from os import path
+from subprocess import PIPE, Popen as popen
+
+from colorize import colorize, parse_args as colorize_args
+
+def usage(errstr=""):
+    prog = path.basename(sys.argv[0])
+    sys.stderr.write("""Usage: %s [colorizer options] -- subprogram [args]
+
+Run the subprogram and colorize its standard output and standard error
+separately. Both streams are passed-through to the corresponding output
+stream of this program. Everything before '--' is passed as an option to the
+colorizer (colorizer.py), and everything after forms the program invocation.
+(Note this program's standard input is forwarded to the subprogram as well.)
+
+The exit code of this program will match that of the subprocess.
+""" % (prog,))
+    if errstr:
+        sys.stderr.write(errstr + "\n")
+    sys.stderr.flush()
+    sys.exit(1)
+
+def run_colorize(startEvent, *args, **kwargs):
+    """Run from a thread. Both threads wait to start until the startEvent
+    is triggered."""
+    startEvent.wait()
+    colorize(*args, **kwargs)
+
+def main():
+    # Everything before '--' goes to colorize, afterwards fomrs the subprogram.
+    colorize_opts, subprog_args = colorize_args(sys.argv[1:])
+
+    # We need subprogram arguments.
+    if not subprog_args:
+        usage()
+
+    subprog = popen(subprog_args, shell=False, stdout=PIPE, stderr=PIPE)
+
+    # Colorize stdout and stderr separately in threads.
+    # While the outputs may bash each other in the terminal, this is
+    # likely similar to the effects of the input program anyway.
+    startEvent = threading.Event()
+    t0 = threading.Thread(target=run_colorize,
+            args=(startEvent, colorize_opts),
+            kwargs={ 'istream': subprog.stdout, 'ostream': sys.stdout },
+            name='colorize-stdout')
+    t1 = threading.Thread(target=run_colorize,
+            args=(startEvent, colorize_opts),
+            kwargs={ 'istream': subprog.stderr, 'ostream': sys.stderr },
+            name='colorize-stderr')
+
+    # The threads will wait to call colorize until the startEvent is triggered.
+    t0.start()
+    t1.start()
+    startEvent.set()
+
+    # Run the subprogram.
+    ret = subprog.wait()
+
+    # Try to join the threads irrespective of the order in which they finish.
+    while t0.is_alive() or t1.is_alive():
+        t0.join(0.010)
+        t1.join(0.010)
+
+    return ret
+
+if __name__ == '__main__':
+    sys.exit(main())
+
