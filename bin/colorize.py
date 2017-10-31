@@ -202,7 +202,12 @@ class unbuffered_stream(object):
             # Collect characters into the line one-by-one.
             # See if we have any more characters for next time.
             if event & select.POLLIN != 0:
-                line.write(self.istream.read(1))
+                # If we encounter a new line, go ahead and yield to improve the
+                # reliability of matching patterns like ^ and $.
+                ch = self.istream.read(1)
+                line.write(ch)
+                if ch == '\n':
+                    break
                 check_list = self.poller.poll(0)
 
             # For any other event, the stream must be dead.
