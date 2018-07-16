@@ -60,6 +60,7 @@ function verbose_rm() {
 }
 
 # Revert modified files, remove newly added files, force update
+echo "Updating $(svn-branch)..."
 svn status | grep '^[A?]' | cut -d' ' -f2- | xargs echo | verbose_rm \
   && svn revert -R gcc/fortran gcc/testsuite libgfortran \
   && svn update
@@ -68,6 +69,8 @@ test $? -ne 0 && echo "UPDATE FAILED, try again" && exit 2
 # Grab message and author from patch file
 author=$(grep '^From:' $patch | cut -d' ' -f2-)
 test -z "$author" && author="$NAME  $EMAIL"
+# ensure there are two spaces between name and e-mail
+author="$(echo "$author" | sed -r 's/([^ ]) </\1  </')"
 
 log_head=$(date +"%Y-%m-%d  $author")
 
