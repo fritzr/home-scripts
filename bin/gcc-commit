@@ -149,6 +149,11 @@ BEGIN {
     }
   }
   if (\$line =~ /^Subject[^\\]]+\\] *(.*)$/) {
+    \$findpr=\$line;
+    while (\$findpr =~ /(PR[^0-9]+[0-9]+)(.*)/i) {
+      \$pr->print("\\t", \$1, "\\n");
+      \$findpr=\$2;
+    }
     \$message=1;
   }
 
