@@ -37,6 +37,16 @@ if [ ! -d gcc/fortran -o ! -d gcc/testsuite/gfortran.dg -o ! -d libgfortran ];
 then usage "error: not in a gcc root"
 fi
 
+pbn=$(basename -- "$patch")
+./contrib/check_GNU_style.sh $patch | tee /tmp/${pbn}.style
+ret=$?
+num="$(grep -c '^[0-9]' /tmp/${pbn}.style)"
+if [ $ret -ne 0 -o $num -gt 0 ]; then
+  echo
+  read -e -p "Style check reported $num issues, continue? [y/N] > " check_style
+  test "$check_style" = "y" -o "$check_style" = "Y" || exit 1
+fi
+
 function verbose_rm() {
   while read i; do
     if [ -f "$i" ]; then
