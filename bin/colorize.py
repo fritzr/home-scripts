@@ -76,6 +76,8 @@ _names = {
     'W' : 'bold white',   # Bold White
 }
 
+_rnames = dict((name, key) for key, name in _names.items())
+
 _kcolors = 'rgbcymkwRGBCYMKWu'
 
 def usage(errstr=""):
@@ -270,6 +272,30 @@ def parse_args(args=None):
         args = sys.argv[1:]
     from getopt import getopt
     return getopt(args, _sopts)
+
+def color(string='', color=None, reset=True):
+    """Color a string with the given color. Keys are from _colors or _names in
+    this module. By default, resets the color at the end of the string. Set
+    reset=False to let the color seep past this string."""
+    if color is None:
+        ckey = _RESET
+    if not string:
+        string = ''
+    if not isinstance(string, str):
+        string = str(string)
+    if isinstance(color, str) and len(color) > 0:
+        color = color[0]
+    if color in _rnames:
+        color = _rnames[color]
+    if color in _colors:
+        ckey = _colors[color]
+    else:
+        ckey = _RESET
+    if reset:
+        rs = _RESET
+    else:
+        rs = ''
+    return ckey + string + rs
 
 def colorize(opts, istream=None, ostream=None):
     if istream is None:
