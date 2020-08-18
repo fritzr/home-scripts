@@ -1,0 +1,13 @@
+#!/bin/sh
+
+tmp_file=$(mktemp)
+trap "rm -f ${tmp_file}" HUP INT QUIT ILL TRAP KILL BUS TERM EXIT
+for file in "$@"; do
+  # Check that the file exists
+  if test -r "${file}" -a -f "${file}" -a -s "${file}"; then
+      vim -E -X -R -i NONE \
+        -c "call AnsiHighlight(\"${tmp_file}\") | q!" \
+        -- "${file}" </dev/tty >/dev/null 2>&1 \
+        && cat "${tmp_file}"
+  fi
+done
