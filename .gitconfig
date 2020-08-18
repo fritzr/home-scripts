@@ -15,6 +15,15 @@
         update = add -u
         up = add -u
         amend = commit --amend
-        patch = "!f() { git format-patch $1^..$1 ${@}; }; f"
+        patch = "!f() { git-patch ${@}; }; f"
         prepare = "!f() { git-prepare ${@}; }; f"
         rc = "!f() { git rebase --continue && git show --stat; }; f"
+        rewrite = "!f() { git-rewrite \"$@\"; }; f"
+        ydiff = "!f() { git diff $@ | ydiff -c always; }; f"
+        ylog = "!f() { ydiff -l -c always -- \"$@\"; }; f"
+        tags = "!f() { git-tags \"$@\"; }; f"
+[push]
+	default = simple
+[merge "merge-changelog"]
+	name = GNU-style ChangeLog merge driver
+	driver = git-merge-changelog %O %A %B

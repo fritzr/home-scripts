@@ -1,0 +1,85 @@
+#!/bin/sh
+#
+# Rewrite git commits.
+#
+
+usage() {
+  prog="$(basename -- "$0")"
+  cat >&2 <<EOF
+usage: $prog [-vf] [-a old-author:new-author] [-e old-email:new-email] commitish
+
+Rewrite commits across all branches and tags to fixup authors/emails.
+EOF
+  exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+author=0
+email=0
+verbose=0
+force=
+while getopts "vfa:e:" opt ; do
+  case $opt in
+    a)
+      author=1
+      old_author="`echo "$OPTARG" | cut -d: -f1`"
+      new_author="`echo "$OPTARG" | cut -d: -f2-`"
+      ;;
+    e)
+      email=1
+      old_email="`echo "$OPTARG" | cut -d: -f1`"
+      new_email="`echo "$OPTARG" | cut -d: -f2-`"
+      ;;
+    v)
+      verbose=1
+      ;;
+    f)
+      force="--force"
+      ;;
+    *)
+      exit 2
+  esac
+done
+
+if [[ $verbose -ne 0 ]]; then
+  echo "Rewriting:" >&2
+  if [[ $author -ne 0 ]]; then
+    echo "Author: '${old_author}' -> '${new_author}'" >&2
+  fi
+  if [[ $email -ne 0 ]]; then
+    echo "E-mail: '${old_email}' -> '${new_email}'" >&2
+  fi
+fi
+
+CMD="$(cat <<EOF
+if [ "\$GIT_COMITTER_NAME" = "$old_author" ];
+then
+  GIT_COMMITTER_NAME="$new_author";
+fi;
+if [ "\$GIT_COMMITTER_EMAIL" = "$old_email" ];
+then
+  GIT_COMMITTER_EMAIL="$new_email";
+fi;
+if [ "\$GIT_AUTHOR_NAME" = "$old_author" ];
+then
+  GIT_AUTHOR_NAME="$new_author";
+fi;
+if [ "\$GIT_AUTHOR_EMAIL" = "$old_email" ]; then
+  GIT_AUTHOR_EMAIL="$new_email";
+fi;
+export GIT_COMMITTER_NAME;
+export GIT_COMMITTER_EMAIL;
+export GIT_AUTHOR_NAME;
+export GIT_AUTHOR_EMAIL;
+EOF
+)"
+
+if [[ $verbose -ne 0 ]]; then
+  echo $CMD >&2
+fi
+
+exec git filter-branch $force --env-filter "$CMD" --tag-name-filter cat \
+  -- --branches --tags

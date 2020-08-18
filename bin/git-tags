@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# git tags
+# Display tags along with date, short hash and message.
+#
+
+function git-tags() {
+  local fmt_tail=" (%<(13)%ar) %C(yellow)%h%Creset %s"
+  local -a tags
+  mapfile -t tags < <(git tag -l --format='%(refname:strip=2)' "$@")
+
+  local l_maxtag=0
+  for tag in "${tags[@]}"l; do
+    if [[ ${l_maxtag} -lt ${#tag} ]]; then
+      l_maxtag=${#tag}
+    fi
+  done
+
+  local wtag
+  for tag in "${tags[@]}"; do
+    # wide tag (padded with zeroes)
+    wtag=$(printf "%-${l_maxtag}s" "${tag}")
+    git log -n1 --pretty=format:"%C(bold)${wtag}%Creset${fmt_tail}" "${tag}"
+  done
+}
+
+git-tags "$@"

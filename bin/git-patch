@@ -1,0 +1,12 @@
+#!/bin/bash
+rev=${1:-HEAD}
+shift
+
+fn="$(${GIT:-git} format-patch ${rev}^..${rev} ${@})"
+test $? || exit $?
+
+patch-head $fn
+ret=$?
+echo $fn
+
+exit $ret
