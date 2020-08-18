@@ -1,0 +1,3 @@
+test_source "$HOME/.complete.d/completions"
+
+# vim: set ft=sh:

@@ -1,0 +1,266 @@
+unalias cd 2>/dev/null
+unset -f cd
+
+# internal debug check to make sure you don't mess up test_{pre,ap}pend
+function test_testflag() {
+  local flag="$1"
+  if [[ -z "$flag" || x"${flag:0:1}" != x"-"  ]]; then
+    echo "${BASH_SOURCE[2]}:${BASH_LINENO[1]}:${FUNCNAME[1]}: bad test flag '$1'"
+  fi
+}
+
+# test_export varname value
+#
+# Export a variable if the new value pass `test -flag`.
+#
+# e.g. test_export -d MY_PATH /tmp/a
+
+function test_export() {
+  test_testflag "$1" || return $?
+  if [ $1 "$3" ]; then
+    eval export "$2"='$3'
+  else
+    eval unset "$2"
+  fi
+}
+
+# test_source path [path...]
+#
+# Source one or more files but only if they exist and are regular files.
+#
+# e.g. test_source script1.sh script2.sh
+
+function test_source() {
+  local arg
+  for arg; do
+    if [[ -f "$arg" ]]; then
+      source "$arg"
+    fi
+  done
+}
+
+# append [-s separator=:]varname value [value...]
+#
+# Append value(s) to a variable list.
+#
+# e.g. append PATH /tmp/a
+
+append() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local varname="$1"
+  local newval="${!varname:+${!varname}${sep}}$2"
+  eval export "$varname"='"$newval"'
+}
+
+# prepend [-s separator=:] varname value [value...]
+#
+# Prepend value(s) to a variable list.
+#
+# e.g. prepend PATH /tmp/a /tmp/b
+
+prepend() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local varname="$1"
+  local newval="$2${!varname:+${sep}${!varname}}"
+  eval export "$varname"='"$newval"'
+}
+
+# remove_list [-s separator=:] varname value
+#
+# Remove a value from a variable list.
+#
+# e.g. remove_list PATH ~/bin
+
+remove_list() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local varname="$1"
+  local remove="$2"
+  local oldval="${!varname}"
+  local newval="${oldval//${remove//\//\\\/}/}"
+  eval export "$varname"='"$newval"'
+  clean_list -s "$sep" $varname
+}
+
+# test_append [-s separator=:] -flag varname value [value...]
+#
+# Append value(s) to a variable list if the new value(s) pass `test -flag`.
+#
+# e.g. test_append -d PATH /tmp/a /tmp/b
+
+function test_append() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local test_flag="$1"
+  local varname="$2"
+  local newval
+  test_testflag "$test_flag" || return $?
+  shift 2
+  local arg
+  for arg ; do
+    if [ $test_flag "$arg" ]; then
+      append -s "$sep" "$varname" "$arg"
+    fi
+  done
+}
+
+# test_prepend [-s separator=:] -flag varname value [value...]
+#
+# Prepend value(s) to a variable list if the new value(s) pass `test -flag`.
+#
+# e.g. test_prepend -d PATH /tmp/a /tmp/b
+
+function test_prepend() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local test_flag="$1"
+  local varname="$2"
+  local newval
+  test_testflag "$test_flag" || return $?
+  shift 2
+  local arg
+  for arg ; do
+    if [ $test_flag "$arg" ]; then
+      prepend -s "$sep" "$varname" "$arg"
+    fi
+  done
+}
+
+# clean_list [-s separator=:] varname
+#
+# Clean duplicate and empty entries from a list variable.
+#
+# e.g. clean_list PATH
+
+function clean_list() {
+  local sep=:
+  if [[ x"$1" = x"-s" ]]; then
+    sep="$2"
+    shift 2
+  fi
+
+  local varname="$1"
+  local newval="$(echo -n ${!varname} | awk -v ORS="$sep" -v RS="$sep" \
+      '{
+         gsub(/^ +/, "", $0);
+         gsub(/ +$/, "", $0);
+         if ($0 && !x[$0]) {
+           print;
+         }
+         x[$0]=1;
+       }')"
+  eval export "$varname"='"${newval%:}"'
+}
+
+# version_compare v1 v2
+#
+# Compare two version strings.
+# Output 0, -1, or 1 when v1 is equal, less, or greater than v2.
+#
+# e.g. version_compare 22.13 22.4 => 1
+function version_compare() {
+  if [[ x"$1" = x"$2" ]]; then
+    echo 0
+    return 0
+  fi
+
+  local vsort=($(echo -e "$1\n$2" | /bin/sort -V))
+  if [[ x"${vsort[0]}" = x"$1" ]]; then
+    echo -1
+  else
+    echo 1
+  fi
+}
+
+function version_eq() {
+  test x"$1" = x"$2"
+}
+
+function version_gt() {
+  test "$(version_compare "$@")" -gt 0
+}
+
+function version_ge() {
+  test "$(version_compare "$@")" -ge 0
+}
+
+function version_lt() {
+  test "$(version_compare "$@")" -lt 0
+}
+
+function version_le() {
+  test "$(version_compare "$@")" -le 0
+}
+
+## Color control.
+
+_esc="\033"
+function esc() { echo -ne "$_esc" ; }
+function _ctrl() { echo -n "${_esc}[${1}m" ; }
+
+__reset=0
+__bright=1
+__dim=2
+__under=4
+__blink=5
+__reverse=7
+__hidden=8
+__black=30
+__red=31
+__green=32
+__yellow=33
+__blue=34
+__magenta=35
+__cyan=36
+__white=37
+
+_reset="`_ctrl $__reset`"
+_bright="`_ctrl ${__bright}`"
+_dim="`_ctrl ${__dim}`"
+_under="`_ctrl ${__under}`"
+_blink="`_ctrl ${__blink}`"
+_reverse="`_ctrl ${__reverse}`"
+_hidden="`_ctrl ${__hidden}`"
+_black="`_ctrl ${__black}`"
+_red="`_ctrl ${__red}`"
+_green="`_ctrl ${__green}`"
+_yellow="`_ctrl ${__yellow}`"
+_blue="`_ctrl ${__blue}`"
+_magenta="`_ctrl ${__magenta}`"
+_cyan="`_ctrl ${__cyan}`"
+_white="`_ctrl ${__white}`"
+
+# ctrl <control1> [<control2> <control3>...]
+#
+# e.g. 'ctrl bold red; echo "error"; ctrl reset'
+function ctrl() {
+  local num_name
+  for ctlname in "$@"; do
+    num_name="__$ctlname"
+    echo -ne "${_esc}[${!num_name}m"
+  done
+}
+
+# vim: set ft=sh:
