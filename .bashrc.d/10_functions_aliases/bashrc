@@ -1,0 +1,134 @@
+#!/bin/bash
+
+: ${RCDIR:=~/.bashrc.d}
+export RCDIR
+
+if [[ -d "$HOME/logs" ]]; then
+  RCLOG=$HOME/logs/bashrc.log
+fi
+
+function rcfiles_source() {
+  local force=0
+
+  if [[ $# -gt 0 && x"$1" = x"-f" ]]; then
+    force=1
+    shift
+  fi
+
+  local rcdir="${1:-$RCDIR}"
+
+  # Initialize timestamping.
+  local _tstamp_status=1
+
+  # With -f, don't use timestamping and reload all.
+  if [[ $force -eq 0 ]]; then
+    local tstamp="$(find "$RCDIR" -name tstamp -print -quit \
+      2>>${RCLOG:-/dev/stderr})"
+    if [[ -e "$tstamp" ]]; then
+      . "$tstamp"
+      _tstamp_status=$?
+      if [[ $_tstamp_status -ne 0 ]]; then
+        if [[ $force -ne 0 ]]; then
+          _tstamp_status=0
+        else
+          return $_tstamp_status
+        fi
+      fi
+    fi
+
+    if type -p tstamp_init; then
+      tstamp_init
+      _tstamp_status=$?
+    fi
+    if ! type -p tstamp_update; then
+      function tstamp_update() { return 0; }
+    fi
+  else
+    unset RCFILES_SOURCED
+  fi
+
+  if [[ -d "$rcdir" ]]; then
+    for f in $(/bin/find "$rcdir" -type f -o -type l 2>/dev/null | /bin/sort)
+    do
+      if [ $_tstamp_status -ne 0 -o -z "$RCFILES_SOURCED" ] \
+          || tstamp_update "$f"
+      then
+        echo "sourcing '$f'" >>${RCLOG:-/dev/stderr}
+        source $f
+      fi
+    done
+  fi
+
+  RCFILES_SOURCED=1
+}
+
+# rced <rcfile name>
+#
+# Edit an rc file under $RCDIR.
+# Filenames are expected to be like [NN_]name[/[MM_]sub_name], where NN and MM
+# are digits used to incur an ordering. The argument to rcvi is simply
+# name/sub_name in the above example -- the numbers are inferred.
+#
+# If *name/*sub_name is given and such a file exists, it is edited.
+# If there is no /*sub_name part, then *name is edited if it exists.
+# Finally, if *name does not exist, a new file baed on `name` is edited.
+# If `name` already starts with digits, `name` is edited as-is.
+# Otherwise a default ordering prefix is chosen (30).
+#
+# "$EDITOR filename" is invoked to edit a file.
+function rced() {
+  if [[ ! -d "$RCDIR" ]]; then
+    echo "${FUNCNAME[0]}: error: no RCDIR" >&2
+    return 1
+  fi
+
+  if [[ $# -ne 1 ]]; then
+    echo "${FUNCNAME[0]}: error: wrong number of arguments $#, expected 1" >&2
+    return 1
+  fi
+
+  rcfile=$(/usr/bin/env python -S ~/python/rcfind.py edit "$RCDIR" "$@")
+  if [[ -n "$rcfile" ]]; then
+    $EDITOR "$rcfile"
+  else
+    echo "${FUNCNAME[0]}: error: could not find rcfile matching '$@'" >&2
+    return 2
+  fi
+}
+
+# rcfind [-l] <variable, alias, or function>
+#
+# Find the rcfile(s) under $RCDIR which contains the variable, alias, or
+# function definition.
+#
+# For example, `rcfind -l rcfind` will print the name of this file.
+#
+function rcfind() {
+  if [[ ! -d "$RCDIR" ]]; then
+    echo "${FUNCNAME[0]}: error: no RCDIR" >&2
+    return 1
+  fi
+
+  local grepopts="-n"
+  if [[ x"$1" = x"-l" ]]; then
+    grepopts="-l"
+    shift
+  fi
+
+  if [[ $# -ne 1 ]]; then
+    echo "${FUNCNAME[0]}: error: wrong number of arguments $#, expected 1" >&2
+    return 1
+  fi
+
+  local name="$1"
+
+  grep $grepopts -rIsE \
+    -e "($name *\\( *\\) *{|alias +$name\\>|export +$name=|set +$name=)" \
+    "$RCDIR"
+}
+
+# Reload bashrc
+alias reload="rcfiles_source -f"
+
+# vim: set ft=sh:
+

@@ -1,0 +1,96 @@
+#
+# Time-stamping (for make(1)-like build cache-ing behavior).
+#
+
+_TSTAMPDIR=${XDG_RUNTIME_DIR}/bashrc
+
+# tstamp_file
+#
+# Prints the name of the timestamp database used by the tstamp_* functions.
+#
+
+tstamp_file() {
+  echo "${_TSTAMPDIR}/${HOSTNAME}.sqlite3"
+}
+
+_TSTAMP_SQLOG="$HOME/logs/tstamp-sqlite.log"
+: ${SQLITE3:=$(command -v sqlite3)}
+
+# tstamp_init
+#
+# Initialize the timestamp database used by tstamp_update().
+# Returns non-zero on error.
+#
+
+tstamp_init() {
+  mkdir -p $_TSTAMPDIR 2>/dev/null || return 1
+  local db=$(tstamp_file)
+  if [[ ! -e "$db" ]]; then
+    "${SQLITE3:-sqlite3}" -echo "$db" \
+      "CREATE TABLE IF NOT EXISTS files(
+          filename TEXT UNIQUE,
+          last_updated INTEGER
+        )" >>$_TSTAMP_SQLOG 2>&1
+  fi
+}
+
+# tstamp_update <filename>
+#
+# Checks whether a file needs to be updated relative to the last time this
+# function was called on it.
+#
+# Returns 0 if the file is newer than the last call to tstamp_update <filename>.
+# Returns 1 if the file is older then the last call to tstamp_update <filename>.
+# Returns 2 if something goes wrong.
+#
+# For example:
+#    $ touch /tmp/foo
+#    $ tstamp_update /tmp/foo ; echo $?
+#    0
+#    $ tstamp_update /tmp/foo ; echo $?
+#    1
+#    $ touch /tmp/foo
+#    $ tstamp_update /tmp/foo ; echo $?
+#    0
+#
+
+tstamp_update() {
+  local dbfile="$(tstamp_file)"
+  local filename="$(readlink -f -- "$1")"
+  if [[ $# -lt 1 ]]; then
+    return 2
+  fi
+
+  local file_time=
+  file_time=$(/usr/bin/stat -c%Y "$filename") || return 2
+
+  # Check the last update time.
+  local last_updated=
+  last_updated=$("${SQLITE3:-sqlite3}" -noheader "$dbfile" \
+    "SELECT last_updated FROM files WHERE filename = '$filename'" \
+    2>>$_TSTAMP_SQLOG) || return 2
+
+  # If the file doesn't contain an entry, update it and insert one.
+  local ret=
+  if [[ -z "$last_updated" ]]; then
+    # yes update
+    last_updated=$file_time
+    ret=0
+  else
+    # update if the file is newer
+    [[ $last_updated -lt $file_time ]]
+    ret=$?
+  fi
+
+  # If we do need to update, then update
+  if [[ $ret -eq 0 ]]; then
+    "${SQLITE3:-sqlite3}" -echo "$dbfile" \
+      "INSERT OR REPLACE INTO files(filename, last_updated)
+        VALUES('$filename', $file_time)" \
+      >>$_TSTAMP_SQLOG 2>&1 || return 2
+  fi
+
+  return $ret
+}
+
+# vim: set ft=sh:
