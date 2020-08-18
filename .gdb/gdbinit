@@ -1,4 +1,0 @@
-source ~/.gdb/gcc-macros
-
-set follow-fork-mode child
-catch fork
