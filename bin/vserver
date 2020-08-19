@@ -1,10 +1,28 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Slightly more convenient arguments for vncserver
 #
 
 if [ $# -lt 1 ]; then echo "which port?"; exit 1; fi
-vncserver -geometry 3840x1080 -depth 24 $*
+
+port=$1
+readarray xvncs < <(ps h -C Xvnc -opid)
+
+vnc_running=0
+for vnc_pid in "${xvncs[@]}"; do
+  args=($(ps h -q $vnc_pid -ww -oargs))
+  if [[ x"${args[1]}" = x"$port" ]]; then
+    vnc_running=$vnc_pid
+    break
+  fi
+done
+
+if [[ $vnc_running -ne 0 ]]; then
+  echo "vnc already running on $port with PID $vnc_running"
+  exit
+fi
+
+vncserver -geometry 6880x1440 -geometry 5120x1600 -depth 24 "$@"
 ret=$?
 echo "server pid: $$"
 exit $ret
