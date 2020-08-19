@@ -1,0 +1,95 @@
+#                                                          -*- shell-script -*-
+#   Custom _filedir ripped from bash-completion for bash 4.1+
+#   which has better handling of paths beginning with an environment variable.
+#   Stock _filedir will replace 'ls $HOME/' with 'ls \$HOME/' which is useless.
+#
+#   This should be saved as ~/.bash_completion so that it is run _after_ the
+#   system bash_completion script. If placed in ${XDG_CONFIG_DIR:-~/.config}
+#   it is run _before_ the system script.
+#
+#   Copyright © 2006-2008, Ian Macdonald <ian@caliban.org>
+#             © 2009-2013, Bash Completion Maintainers
+#                     <bash-completion-devel@lists.alioth.debian.org>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2, or (at your option)
+#   any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software Foundation,
+#   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+#   The latest version of this software can be obtained here:
+#
+#   http://bash-completion.alioth.debian.org/
+#
+#   RELEASE: 2.1
+
+# This function performs file and directory completion. It's better than
+# simply using 'compgen -f', because it honours spaces in filenames.
+# @param $1  If `-d', complete only on directories.  Otherwise filter/pick only
+#            completions with `.$1' and the uppercase version of it as file
+#            extension.
+#
+function _filedir()
+{
+    local i IFS=$'\n' xspec
+
+    _tilde "$cur" || return 0
+
+    local -a toks
+    local quoted x tmp environment=0
+
+    # Handle environment variables specially.
+    if [[ $cur =~ ^(\$\{?)([A-Za-z0-9_]*) ]]; then
+        local variable="${BASH_REMATCH[2]}"
+        local value="${!variable}"
+        [[ -z "${value:+set}" ]]
+        environment=$? # 1 if set, 0 otherwise
+    fi
+
+    _quote_readline_by_ref "$cur" quoted
+    x=$( compgen -d -- "$quoted" ) &&
+    while read -r tmp; do
+        toks+=( "$tmp" )
+    done <<< "$x"
+
+    if [[ "$1" != -d ]]; then
+        # Munge xspec to contain uppercase version too
+        # http://thread.gmane.org/gmane.comp.shells.bash.bugs/15294/focus=15306
+        xspec=${1:+"!*.@($1|${1^^})"}
+        x=$( compgen -f -X "$xspec" -- $quoted ) &&
+        while read -r tmp; do
+            toks+=( "$tmp" )
+        done <<< "$x"
+    fi
+
+    # If the filter failed to produce anything, try without it if configured to
+    [[ -n ${COMP_FILEDIR_FALLBACK:-} && \
+        -n "$1" && "$1" != -d && ${#toks[@]} -lt 1 ]] && \
+        x=$( compgen -f -- $quoted ) &&
+        while read -r tmp; do
+            toks+=( "$tmp" )
+        done <<< "$x"
+
+    if [[ ${#toks[@]} -ne 0 ]]; then
+        # 2>/dev/null for direct invocation, e.g. in the _filedir unit test
+        if [[ $environment -eq 0 ]]; then
+            compopt -o filenames 2>/dev/null
+            COMPREPLY+=( "${toks[@]}" )
+        else
+            for tok in "${toks[@]}"; do
+                COMPREPLY+=("${tok/${value//\//\\\/}/${variable}}")
+            done
+        fi
+    fi
+} # _filedir()
+
+
+# ex: ts=4 sw=4 et filetype=sh

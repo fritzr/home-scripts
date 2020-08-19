@@ -1,7 +1,0 @@
-#!/bin/bash
-#
-# Completions for bash
-#
-
-# Only cd to directories... Duh
-complete -d cd
