@@ -4,16 +4,85 @@
 #   e.g. make && make install && notify
 #
 
-RET=$?
+RET=$? # simulate +pipefail
 
-N=3
-if [ $# -gt 0 ]; then
-    N=$1
+interval="0.1"
+n="3"
+send=false
+text="notify"
+timeout=0
+title=""
+
+while [ $# -gt 0 ]; do
+  arg="$1"
+  case "$arg" in
+    -h|--help)
+      echo "usage: notify [-x [-t NUM] [-T TITLE]] [-i SECS] [-n NUM] [DESC...]
+
+Notify that something important has happened by echoing bells to the terminal.
+Echoes NUM bells (default 3) with an interval of SECS seconds (default 0.1).
+Remaining args are passed to printf.
+
+With -x, also notify graphically using notify-send.
+The desktop notification will have a timeout given by -t (default 0/infinite).
+The title for the notification may be given with -T (default: 'notify!')." >&2
+      exit 1
+      ;;
+    -i|--interval)
+      interval="$2"
+      shift
+      ;;
+    -n|--num)
+      n="$2"
+      shift
+      ;;
+    -t|--timeout)
+      timeout="$2"
+      shift
+      ;;
+    -T|--title)
+      title="$2";
+      shift
+      ;;
+    -x)
+      send=true
+      ;;
+    *)
+      text="$@"
+      break
+      ;;
+  esac
+  shift
+done
+
+ICONBASE="/usr/share/icons/gnome/32x32/"
+if $send; then
+  if [ -z "$title" ]; then
+    title="notify$(python -c "print('!'*$n)" 2>/dev/null)"
+  fi
+  urgency=critical
+  icon="${ICONBASE}/status/dialog-error.png"
+  case $n in
+    0|1|2)
+      urgency=low
+      icon="${ICONBASE}/status/dialog-information.png"
+      ;;
+    3|4)
+      urgency=normal
+      icon="${ICONBASE}/status/dialog-warning.png"
+      ;;
+  esac
+  notify-send --expire-time "$timeout" --urgency "$urgency" --icon "$icon" \
+    "$title" "$text"
 fi
 
-for i in `seq 1 $N`; do
+if [ x"$text" != x"" ]; then
+  printf "$text\n" >&2
+fi
+
+for i in `seq 1 $n`; do
     echo -ne '\a'
-    sleep 0.1
+    sleep $interval
 done
 
 exit $RET
