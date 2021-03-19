@@ -6,21 +6,20 @@ if [ -f /etc/bashrc ]; then
 fi
 
 # Local definitions.
-PATH=/usr/bin:/bin:/usr/sbin:/sbin
-LD_LIBRARY_PATH=
-MANPATH=
-PYTHONPATH=
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export LD_LIBRARY_PATH=
+export MANPATH=
+export PYTHONPATH=
 
-# Initialize the rcfile system and source rcfiles.
 if [[ -d ~/.bashrc.d ]]; then
+  # Initialize the rcfile system and source rcfiles.
   : ${RCDIR:=~/.bashrc.d}
   export RCDIR
-  _rcinit="$(find ~/.bashrc.d -name bashrc -print -quit 2>/dev/null)"
-  if [[ -f "${_rcinit}" ]]; then
-    # setup rcfiles_source function.
+  _rcinit="$(/usr/bin/find ~/.bashrc.d -name bashrc -print -quit 2>/dev/null)"
+  if [[ -e "${_rcinit}" ]]; then
     . "${_rcinit}"
   fi
   if type -p rcfiles_source; then
-    rcfiles_source
+    rcfiles_source -a
   fi
 fi

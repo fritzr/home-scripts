@@ -7,12 +7,73 @@ if [[ -d "$HOME/logs" ]]; then
   RCLOG=$HOME/logs/bashrc.log
 fi
 
+function write_unity() {
+  /bin/cat \
+    $(/usr/bin/find ${RCDIR:-~/.bashrc.d} -type f -o -type l | /bin/sort) \
+    >|"${1:-${HOME}/.bashrc.unity}"
+}
+
+function write_unity_shared() {
+  local unity="${1:-$HOME/.bashrc.unity}"
+  local lockf="${2:-${TMPDIR:-/tmp}/.bashrc.unity.lock}"
+  local tmpf="${TMPDIR:-/tmp}/.bashrc.unity.$$"
+  if [[ -e "$unity" ]]; then
+    return 0
+  fi
+  (
+    /usr/bin/flock -n -x $lockfd || exit $?
+    echo $$ >$lockfd
+    write_unity "$tmpf" \
+      && (
+        /bin/mv -f "$tmpf" "$unity"
+        /bin/rm -f "$tmpf"
+      )
+  ) {lockfd}>"$lockf" && /bin/rm -f "$lockf"
+}
+
+function make_unity_safe() {
+  # Lock the unity file so only one bash tries to write it.
+  local unity="${1:-${HOME}/.bashrc.unity}"
+  local lockf="${2:-${TMPDIR:-/tmp}/.bashrc.unity.lock}"
+  if ! write_unity_shared "$unity" "$lockf"; then
+    # Someone else has an exclusive lock.
+    # Wait for a time until it is released.
+    # If we timeout, give up.
+    # If we succeed, the lock file might exist; remove it if so.
+    /usr/bin/flock -w 1 -s "$lockf"
+    /usr/bin/flock -n -x "$lockf" -c "rm -f '$lockf'"
+  fi
+  if [[ -e "$unity" ]]; then
+    return 0
+  fi
+  echo "warning: timed out waiting for '$unity' ('$lockf' is held)" >&2
+  return 1
+}
+
+
 function rcfiles_source() {
   local force=0
+  local update=0
+  local all=0
+
+  if [[ $# -gt 0 && x"$1" = x"-a" ]]; then
+    all=1
+    shift
+  fi
+
+  if [[ $# -gt 0 && x"$1" = x"-u" ]]; then
+    update=1
+    shift
+  fi
 
   if [[ $# -gt 0 && x"$1" = x"-f" ]]; then
     force=1
     shift
+  fi
+
+  # By default, update based on timestamps.
+  if [[ $all -eq 0 && $update -eq 0 && $force -eq 0 ]]; then
+    update=1
   fi
 
   local rcdir="${1:-$RCDIR}"
@@ -20,10 +81,23 @@ function rcfiles_source() {
   # Initialize timestamping.
   local _tstamp_status=1
 
-  # With -f, don't use timestamping and reload all.
-  if [[ $force -eq 0 ]]; then
-    local tstamp="$(find "$RCDIR" -name tstamp -print -quit \
-      2>>${RCLOG:-/dev/stderr})"
+  # With -f, don't use timestamping or unity files and reload all.
+  if [[ $force -ne 0 ]]; then
+    if [[ -d "$rcdir" ]]; then
+      for f in $(/bin/find "$rcdir" -type f -o -type l 2>/dev/null | /bin/sort)
+      do
+        if [ $_tstamp_status -ne 0 -o -z "$RCFILES_SOURCED" ] \
+            || tstamp_update "$f"
+        then
+          echo "sourcing '$f'" >>${RCLOG:-/dev/stderr}
+          source $f
+        fi
+      done
+    fi
+  fi
+
+  if [[ $update -ne 0 ]]; then
+    local tstamp="$(find "$RCDIR" -name tstamp 2>>${RCLOG:-/dev/stderr})"
     if [[ -e "$tstamp" ]]; then
       . "$tstamp"
       _tstamp_status=$?
@@ -47,27 +121,41 @@ function rcfiles_source() {
     unset RCFILES_SOURCED
   fi
 
-  if [[ -d "$rcdir" ]]; then
-    for f in $(/bin/find "$rcdir" -type f -o -type l 2>/dev/null | /bin/sort)
-    do
-      if [ $_tstamp_status -ne 0 -o -z "$RCFILES_SOURCED" ] \
-          || tstamp_update "$f"
-      then
-        echo "sourcing '$f'" >>${RCLOG:-/dev/stderr}
-        source $f
+  if [[ $all -ne 0 ]]; then
+    # ~/.bashrc.unity is a combination of all rcfiles to speedup initial startup
+    # by reducing the number of files we need to stat for each startup.
+    # The downside is to benefit from this at all we need to sort of manually
+    # remove or regenerate this file when any rc file is updated.
+    if [[ $update -eq 0 ]]; then
+      if [[ -z "${NO_BASHRC_UNITY}" ]]; then
+        : ${BASHRC_UNITY:=~/.bashrc.unity}
+        if [[ ! -e "${BASHRC_UNITY}" && -e /usr/bin/flock ]]; then
+          if ! make_unity_safe 2>>${RCLOG:-/dev/stderr}; then
+            echo "warning: failed to create ~/.bashrc.unity" \
+              >>${RCLOG:-/dev/stderr}
+          fi
+        fi
+        if [[ -e ~/.bashrc.unity ]]; then
+          . ~/.bashrc.unity
+          return $?
+        fi
       fi
-    done
+    fi
   fi
 
   RCFILES_SOURCED=1
 }
 
-# rced <rcfile name>
+# 1. rced <rcfile name>
+# 2. rced -f <command>
 #
-# Edit an rc file under $RCDIR.
+# With 1, edit an rc file under $RCDIR.
 # Filenames are expected to be like [NN_]name[/[MM_]sub_name], where NN and MM
 # are digits used to incur an ordering. The argument to rcvi is simply
 # name/sub_name in the above example -- the numbers are inferred.
+#
+# With 2, use `rcfind -l <command>` to locate the file which defines
+# <command>  and then edit it.
 #
 # If *name/*sub_name is given and such a file exists, it is edited.
 # If there is no /*sub_name part, then *name is edited if it exists.
@@ -77,6 +165,14 @@ function rcfiles_source() {
 #
 # "$EDITOR filename" is invoked to edit a file.
 function rced() {
+  if [[ x"$1" = x"-f" ]]; then
+    shift
+    local file
+    file=$(rcfind -l "$@") || return $?
+    $EDITOR "$file"
+    return $?
+  fi
+
   if [[ ! -d "$RCDIR" ]]; then
     echo "${FUNCNAME[0]}: error: no RCDIR" >&2
     return 1
@@ -128,7 +224,9 @@ function rcfind() {
 }
 
 # Reload bashrc
-alias reload="rcfiles_source -f"
+alias reload="rcfiles_source -u"
+alias reloadf="rcfiles_source -f"
+alias reloada="rcfiles_source -a"
 
 # vim: set ft=sh:
 
