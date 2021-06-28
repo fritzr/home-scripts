@@ -6,7 +6,7 @@ if [ x"$GCCBLD" != x"" -a -d "$GCCBLD" ]; then
 fi
 
 make -sk -j4 check-fortran $* 2>&1 | tee test.log \
-  | colorize.py -Runexpected -g' expected' -yunresolved -yunsupported -RFAIL
+  | recolor -Runexpected -g' expected' -yunresolved -yunsupported -RFAIL
 grep -q 'unexpected' test.log
 if [ $? = 0 ]; then
   exec notify 2
