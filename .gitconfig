@@ -10,6 +10,7 @@
         st = status
 	df = diff
 	dfc = diff --cached
+        lso = ls-files --others --exclude-standard
 	last = log -n1 HEAD --stat
 	recommit = commit --amend -C HEAD --reset-author
         update = add -u
@@ -22,6 +23,7 @@
         ydiff = "!f() { git diff $@ | ydiff -c always; }; f"
         ylog = "!f() { ydiff -l -c always -- \"$@\"; }; f"
         tags = "!f() { git-tags \"$@\"; }; f"
+        exec = "!exec "
 [push]
 	default = simple
 [merge "merge-changelog"]
