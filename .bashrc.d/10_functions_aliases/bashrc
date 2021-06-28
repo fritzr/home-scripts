@@ -4,7 +4,7 @@
 export RCDIR
 
 if [[ -d "$HOME/logs" ]]; then
-  RCLOG=$HOME/logs/bashrc.log
+  : ${RCLOG:=$HOME/logs/bashrc.log}
 fi
 
 function write_unity() {
@@ -17,9 +17,6 @@ function write_unity_shared() {
   local unity="${1:-$HOME/.bashrc.unity}"
   local lockf="${2:-${TMPDIR:-/tmp}/.bashrc.unity.lock}"
   local tmpf="${TMPDIR:-/tmp}/.bashrc.unity.$$"
-  if [[ -e "$unity" ]]; then
-    return 0
-  fi
   (
     /usr/bin/flock -n -x $lockfd || exit $?
     echo $$ >$lockfd
@@ -33,7 +30,7 @@ function write_unity_shared() {
 
 function make_unity_safe() {
   # Lock the unity file so only one bash tries to write it.
-  local unity="${1:-${HOME}/.bashrc.unity}"
+  local unity="${1:-${BASHRC_UNITY:-${HOME}/.bashrc.unity}}"
   local lockf="${2:-${TMPDIR:-/tmp}/.bashrc.unity.lock}"
   if ! write_unity_shared "$unity" "$lockf"; then
     # Someone else has an exclusive lock.
@@ -52,98 +49,142 @@ function make_unity_safe() {
 
 
 function rcfiles_source() {
-  local force=0
-  local update=0
-  local all=0
+  local force unity tstamp opt
+  local -f usage
 
-  if [[ $# -gt 0 && x"$1" = x"-a" ]]; then
-    all=1
-    shift
-  fi
+  unset OPTIND
+  while builtin getopts futh opt "$@"; do
+    case "$opt" in
+      f) force=1;;
+      u) unity=1;;
+      t) tstamp=1;;
+      h|?) cat <<EOF >&2
+usage: rcfiles_source [-f|-u|-t] [RCDIR}
 
-  if [[ $# -gt 0 && x"$1" = x"-u" ]]; then
-    update=1
-    shift
-  fi
+Source rc files from RCDIR (default from environment).
 
-  if [[ $# -gt 0 && x"$1" = x"-f" ]]; then
-    force=1
-    shift
-  fi
+With -f (force), always source all files recursively.
+
+With -t (timestamp), only source files which have been modified since the last time
+they were sourced through this function. Timestamps are stored with pathnames
+in a local database when possible -- if not possible, falls back to -f behavior.
+
+With -u (unity), source a unity file which contains all files concatenated together.
+The unity file is only generated if it does not exist. Otherwise, the unity file
+must be updated manually by calling make_unity_safe. The benefit of the unity file
+is primarily to eliminating recursive stat(2) calls incurred by the -t/-f behavior.
+
+By default (with no arguments), use -u.
+
+-f takes priority when specified with -t. Combining -f or -t with -u will cause
+the unity file to be regenerated; with -f, the unity file is always regenerated.
+With -t, the unity file is regenerated if at least one rcfile was sourced
+because it was out of date. Note that combining either option with -u defeats
+the main benefit of using the unity file since stat(2) must be called on each
+rcfile in either case.
+
+The ideal case is that the unity file is updated externally (i.e. via rced,
+make_unity_safe, or write_unity) in which case one can use only -u.
+EOF
+        return 2;;
+    esac
+  done
 
   # By default, update based on timestamps.
-  if [[ $all -eq 0 && $update -eq 0 && $force -eq 0 ]]; then
-    update=1
+  if [[ 0 -eq $force && 0 -eq $unity && 0 -eq $tstamp ]]; then
+    unity=1
   fi
 
-  local rcdir="${1:-$RCDIR}"
+  shift $(($OPTIND-1))
+  local rcdir="${1:-${RCDIR:-~/.bashrc.d}}"
 
-  # Initialize timestamping.
+  # Initialize timestamping when using it with -t.
   local _tstamp_status=1
 
-  # With -f, don't use timestamping or unity files and reload all.
-  if [[ $force -ne 0 ]]; then
-    if [[ -d "$rcdir" ]]; then
-      for f in $(/bin/find "$rcdir" -type f -o -type l 2>/dev/null | /bin/sort)
-      do
-        if [ $_tstamp_status -ne 0 -o -z "$RCFILES_SOURCED" ] \
-            || tstamp_update "$f"
-        then
-          echo "sourcing '$f'" >>${RCLOG:-/dev/stderr}
-          source $f
-        fi
-      done
-    fi
-  fi
-
-  if [[ $update -ne 0 ]]; then
-    local tstamp="$(find "$RCDIR" -name tstamp 2>>${RCLOG:-/dev/stderr})"
-    if [[ -e "$tstamp" ]]; then
-      . "$tstamp"
-      _tstamp_status=$?
-      if [[ $_tstamp_status -ne 0 ]]; then
-        if [[ $force -ne 0 ]]; then
-          _tstamp_status=0
-        else
-          return $_tstamp_status
-        fi
-      fi
-    fi
-
-    if type -p tstamp_init; then
-      tstamp_init
-      _tstamp_status=$?
-    fi
-    if ! type -p tstamp_update; then
-      function tstamp_update() { return 0; }
+  if [[ 0 -ne $tstamp ]]; then
+    local tstamp_script="$(rcfind -f tstamp 2>>${RCLOG:-/dev/stderr})"
+    test -e "$tstamp_script" \
+      && . "$tstamp_script" \
+      && type -p tstamp_init \
+      && tstamp_init \
+      && type -p tstamp_update
+    if [[ 0 -ne $? ]]; then
+      force=1
     fi
   else
     unset RCFILES_SOURCED
   fi
 
-  if [[ $all -ne 0 ]]; then
-    # ~/.bashrc.unity is a combination of all rcfiles to speedup initial startup
-    # by reducing the number of files we need to stat for each startup.
-    # The downside is to benefit from this at all we need to sort of manually
-    # remove or regenerate this file when any rc file is updated.
-    if [[ $update -eq 0 ]]; then
-      if [[ -z "${NO_BASHRC_UNITY}" ]]; then
-        : ${BASHRC_UNITY:=~/.bashrc.unity}
-        if [[ ! -e "${BASHRC_UNITY}" && -e /usr/bin/flock ]]; then
-          if ! make_unity_safe 2>>${RCLOG:-/dev/stderr}; then
-            echo "warning: failed to create ~/.bashrc.unity" \
-              >>${RCLOG:-/dev/stderr}
+  local status=2
+
+  # Check all for timestamps.
+  if [[ 0 -ne $force || 0 -ne $tstamp ]]; then
+    local updated=0
+    if [[ -d "$rcdir" ]]; then
+      for f in $(/bin/find "$rcdir" -type f -o -type l 2>/dev/null | /bin/sort)
+      do
+        if [[ 0 -ne $force || -z "$RCFILES_SOURCED" ]] || tstamp_update "$f"; then
+          if [[ 0 -ne $force ]] && type -p tstamp_update; then
+            tstamp_update "$f"
           fi
+          echo "`/usr/bin/date +%F.%T.%s`  sourcing '$f'" >>${RCLOG:-/dev/stderr}
+          source $f
+          local fstatus=$?
+          if [[ 0 -ne $fstatus ]]; then
+            status=$fstatus
+          fi
+          updated=1
         fi
-        if [[ -e ~/.bashrc.unity ]]; then
-          . ~/.bashrc.unity
-          return $?
+      done
+      # When combining -f or -t with -u, update the unity file.
+      if [[ 0 -eq $status && 0 -ne $unity && 0 -ne $updated ]]; then
+        echo "`/usr/bin/date +%F.%T.%s`  " \
+          "writing unity rcfile '$BASHRC_UNITY'" \
+          >>${RCLOG:-/dev/stderr}
+        if ! make_unity_safe 2>>${RCLOG:-/dev/stderr}; then
+          echo "`/usr/bin/date +%F.%T.%s`  " \
+            "warning: failed to create unity rcfile '$BASHRC_UNITY'" \
+            >>${RCLOG:-/dev/stderr}
         fi
+      fi
+    fi
+
+  # Source the unity file. Generate it if it doesn't exist.
+  else # [[ $unity -ne 0 ]]
+    if [[ -z "${NO_BASHRC_UNITY}" ]]; then
+      : ${BASHRC_UNITY:=~/.bashrc.unity}
+      if [[ ! -e "${BASHRC_UNITY}" && -e /usr/bin/flock ]]; then
+        echo "`/usr/bin/date +%F.%T.%s`  " \
+          "writing unity rcfile '$BASHRC_UNITY'" \
+          >>${RCLOG:-/dev/stderr}
+        if ! make_unity_safe 2>>${RCLOG:-/dev/stderr}; then
+          echo "`/usr/bin/date +%F.%T.%s`  " \
+            "warning: failed to create unity rcfile '$BASHRC_UNITY'" \
+            >>${RCLOG:-/dev/stderr}
+        fi
+      fi
+      if [[ -e "${BASHRC_UNITY}" ]]; then
+        echo "`/usr/bin/date +%F.%T.%s`  sourcing '$BASHRC_UNITY'" \
+          >>${RCLOG:-/dev/stderr}
+        source "${BASHRC_UNITY}"
+        status=$?
       fi
     fi
   fi
 
   RCFILES_SOURCED=1
+  return $status
+}
+
+# rcedit <editor-args...>
+#
+# Edit an rcfile and then update the unity file afterwards.
+#
+function rcedit() {
+  $EDITOR "$@"
+  local status=$?
+  make_unity_safe
+  test $status -eq 0 && $? -eq 0
 }
 
 # 1. rced <rcfile name>
@@ -164,12 +205,13 @@ function rcfiles_source() {
 # Otherwise a default ordering prefix is chosen (30).
 #
 # "$EDITOR filename" is invoked to edit a file.
+# The unity rcfile is recompiled after the editor exits.
 function rced() {
   if [[ x"$1" = x"-f" ]]; then
     shift
     local file
     file=$(rcfind -l "$@") || return $?
-    $EDITOR "$file"
+    rcedit "$file"
     return $?
   fi
 
@@ -185,7 +227,7 @@ function rced() {
 
   rcfile=$(/usr/bin/env python -S ~/python/rcfind.py edit "$RCDIR" "$@")
   if [[ -n "$rcfile" ]]; then
-    $EDITOR "$rcfile"
+    rcedit "$rcfile"
   else
     echo "${FUNCNAME[0]}: error: could not find rcfile matching '$@'" >&2
     return 2
@@ -193,11 +235,15 @@ function rced() {
 }
 
 # rcfind [-l] <variable, alias, or function>
+# rcfind [-l] -f <rcfile>
 #
 # Find the rcfile(s) under $RCDIR which contains the variable, alias, or
 # function definition.
 #
 # For example, `rcfind -l rcfind` will print the name of this file.
+#
+# With -f, look for an rcfile by name rather than by command.
+# For example, `rcfind -l -f bashrc` will print the name of this file.
 #
 function rcfind() {
   if [[ ! -d "$RCDIR" ]]; then
@@ -205,28 +251,46 @@ function rcfind() {
     return 1
   fi
 
-  local grepopts="-n"
-  if [[ x"$1" = x"-l" ]]; then
-    grepopts="-l"
-    shift
-  fi
+  local file=0
+  local opt
+  unset OPTIND
+  while builtin getopts lf opt "$@"; do
+    case $opt in
+      l) grepopts=-l;;
+      f) file=1;;
+      ?) return 2;;
+    esac
+  done
 
+  shift $(($OPTIND-1))
   if [[ $# -ne 1 ]]; then
     echo "${FUNCNAME[0]}: error: wrong number of arguments $#, expected 1" >&2
-    return 1
+    return 2
   fi
 
   local name="$1"
 
-  grep $grepopts -rIsE \
-    -e "($name *\\( *\\) *{|alias +$name\\>|export +$name=|set +$name=)" \
-    "$RCDIR"
+  if [[ 0 -eq $file ]]; then
+    grep $grepopts -rIsE \
+      -e "($name *\\( *\\) *{|alias +$name\\>|export +$name=|set +$name=)" \
+      "$RCDIR"
+  else
+    find "$RCDIR" -name "*$name" -print -quit
+  fi
 }
 
 # Reload bashrc
-alias reload="rcfiles_source -u"
+function reload() {
+  # Use unity rcfile with timestamps by default; otherwise timestamps only
+  if [[ -z "${NO_BASHRC_UNITY}" ]]; then
+    rcfiles_source -t -u
+  else
+    rcfiles_source -t
+  fi
+}
 alias reloadf="rcfiles_source -f"
-alias reloada="rcfiles_source -a"
+alias reloadu="rcfiles_source -u"
+alias reloadt="rcfiles_source -t"
 
 # vim: set ft=sh:
 
